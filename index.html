@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>SpotifAKE Premium</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            height: 100vh;
+            background: #0b0b0e;
+            font-family: 'Segoe UI', sans-serif;
+            color: #ffffff;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* === ОБНОВЛЕННЫЕ СТИЛИ === */
+        /* Общие настройки для угловых неоновых сфер */
+        /* Настройки угловых ликвид-сфер */
+        .corner-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            filter: blur(90px);
+            pointer-events: none;
+            z-index: 1; /* Под стеклом интерфейса */
+            opacity: 0; /* Изначально выключены, ИИ зажжет их при старте трека */
+            transition: transform 0.2s ease, opacity 0.6s ease, background 1s ease;
+        }
+
+        /* Позиции по углам дисплея */
+        #glow-top-left     { top: -200px; left: -200px; }
+        #glow-top-right    { top: -200px; right: -200px; }
+        #glow-bottom-left  { bottom: -200px; left: -200px; }
+        #glow-bottom-right { bottom: -200px; right: -200px; }
+
+        /* Холст на весь экран */
+        #starfield-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .main-wrapper { 
+            display: flex; 
+            flex: 1;
+            z-index: 10; /* Интерфейс поверх всего */
+            height: 100vh; 
+            position: relative;
+        }
+        /* ========================== */    
+
+        /* Боковая панель (Sidebar) */
+        .sidebar {
+            width: 240px; 
+            /* Прозрачный темный леденец */
+            background: rgba(8, 8, 12, 0.35); 
+            
+            /* Мощное размытие проходящего сзади света */
+            backdrop-filter: blur(35px);
+            -webkit-backdrop-filter: blur(35px);
+            
+            padding: 24px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px;
+            
+            /* Тонкий стеклянный срез справа */
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            
+            box-shadow: inset -1px 0 2px rgba(255, 255, 255, 0.03);
+        }
+        .logo-text { font-size: 1.5rem; font-weight: 800; background: linear-gradient(45deg, #1ed760, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .nav-item { padding: 10px 14px; border-radius: 8px; color: #b3b3b3; cursor: pointer; transition: 0.2s; font-weight: 600; }
+        .nav-item:hover, .nav-item.active { background: rgba(255,255,255,0.05); color: #fff; }
+
+        /* Главная контентная зона */
+        .content { 
+            flex: 1; 
+            padding: 32px; 
+            padding-bottom: 120px; 
+            overflow-y: auto; 
+            height: 100vh; 
+            
+            /* Делаем подложку ультра-прозрачной, чтобы просвечивал фон */
+            background: linear-gradient(
+                135deg, 
+                rgba(255, 255, 255, 0.01) 0%, 
+                rgba(0, 0, 0, 0.1) 100%
+            ); 
+            
+            /* ВКЛЮЧАЕМ РАЗМЫТИЕ ЗА КОНТЕЙНЕРОМ */
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            
+            /* Нежный внутренний глянцевый блик по краям */
+            box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.05);
+        }
+        .content h1 { font-size: 2.2rem; margin-bottom: 24px; }
+
+        /* СПИСОК ТРЕКОВ */
+        .track-list { display: flex; flex-direction: column; gap: 8px; }
+        .track-row {
+            display: flex; 
+            align-items: center; 
+            padding: 14px 20px; 
+            border-radius: 20px; /* Более округлые формы для "жидкого" эффекта */
+            cursor: pointer; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            
+            /* Стеклянная жидкая основа */
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%); 
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            
+            /* Тройной контур преломления света */
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            
+            /* Внутреннее свечение сверху создает эффект блика на толстом стекле */
+            box-shadow: 
+                inset 0 2px 4px rgba(255, 255, 255, 0.15),
+                inset 0 -1px 2px rgba(0, 0, 0, 0.4),
+                0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Эффект при наведении — карточка наливается глянцем */
+        .track-row:hover { 
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 100%); 
+            transform: translateY(-2px) scale(1.01); 
+            border-color: rgba(255, 255, 255, 0.25);
+            box-shadow: 
+                inset 0 3px 6px rgba(255, 255, 255, 0.3),
+                0 10px 25px rgba(0, 0, 0, 0.4);
+        }
+        .track-cover { width: 48px; height: 48px; border-radius: 6px; margin-right: 16px; object-fit: cover; background: #282828; }
+        .track-info { flex: 1; }
+        .track-title { font-weight: 600; margin-bottom: 4px; }
+        .track-author { color: #b3b3b3; font-size: 0.85rem; }
+
+        /* НИЖНЯЯ ПАНЕЛЬ УПРАВЛЕНИЯ (Player Bar) */
+        .player-bar {
+            position: absolute;
+            bottom: 25px; 
+            left: 25px;   
+            right: 25px;  
+            height: 85px; 
+            
+            /* Ультра-глянцевое стекло */
+            background: linear-gradient(135deg, rgba(20, 20, 25, 0.4) 0%, rgba(10, 10, 15, 0.6) 100%); 
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            
+            /* Скругление формы "капсула" */
+            border-radius: 24px; 
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 0 30px;
+            
+            /* Глубокие тени: черная объемная наружу и сочная белая внутрь */
+            box-shadow: 
+                inset 0 4px 10px rgba(255, 255, 255, 0.2), 
+                inset 0 -2px 5px rgba(0, 0, 0, 0.5),
+                0 20px 50px rgba(0, 0, 0, 0.7);
+                
+            z-index: 100; 
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Блок текущего трека слева */
+        .current-track { display: flex; align-items: center; width: 30%; gap: 14px; }
+        .current-track-img { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; background: #282828; display: none; }
+
+        /* Блок управления по центру */
+        .controls { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 40%; }
+        .control-btns { display: flex; gap: 24px; align-items: center; }
+        .play-pause-btn { 
+            width: 42px; height: 42px; border-radius: 50%; background: #fff; color: #000; 
+            display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 1.1rem;
+            transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+        .play-pause-btn:hover { transform: scale(1.08); background: #1ed760; }
+        
+        /* Ползунок времени (Таймлайн) */
+        .timeline-wrapper { display: flex; align-items: center; gap: 10px; width: 100%; font-size: 0.8rem; color: #a7a7a7; }
+        .slider {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 4px;
+            background: linear-gradient(to right, #1ed760 0%, #1ed760 0%, #4f4f4f 0%, #4f4f4f 100%);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        
+        /* Кругляшок ползунка */
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ffffff; 
+            cursor: pointer;
+            opacity: 0; /* Прячем в покое */
+            transition: opacity 0.1s ease, transform 0.1s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+
+        /* При наведении на таймлайн или громкость — кружок плавно всплывает */
+        .timeline-wrapper:hover .slider::-webkit-slider-thumb,
+        .volume-wrapper:hover .volume-slider::-webkit-slider-thumb {
+            opacity: 1;
+        }
+        
+        /* Эффект наведения на сам ползунок */
+        .slider:hover {
+            height: 6px;
+        }
+
+        /* Блок громкости справа */
+        .volume-wrapper { width: 30%; display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+        .volume-slider { width: 100px; }
+
+        /* Стильная желтая наклейка BETA */
+        .beta-badge {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            /* Золотой жидкий кристалл */
+            background: linear-gradient(135deg, rgba(250, 204, 21, 0.8) 0%, rgba(234, 179, 8, 0.4) 100%); 
+            backdrop-filter: blur(10px);
+            color: #000000; 
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            padding: 6px 16px;
+            border-radius: 12px; /* Более округлый */
+            border: 1px solid rgba(250, 204, 21, 0.5);
+            
+            box-shadow: 
+                inset 0 2px 4px rgba(255,255,255,0.6),
+                0 10px 25px rgba(234, 179, 8, 0.25); 
+                
+            transform: rotate(3deg); 
+            z-index: 999; 
+        }
+
+
+        /* Контейнер для кубика над плеером */
+        /* Контейнер кубика (свечение теперь вешаем СЮДА, чтобы не ломать 3D) */
+        .dice-zone {
+            position: absolute;
+            bottom: 120px; 
+            left: 45px;
+            width: 60px;
+            height: 60px;
+            perspective: 600px; /* Чуть увеличили глубину для сочности */
+            z-index: 999;
+            cursor: pointer;
+            transition: filter 0.3s ease;
+            will-change: filter;
+        }
+
+        /* Эффект наведения — теперь светится сама зона, сохраняя объём куба внутри! */
+        .dice-zone:hover {
+            filter: drop-shadow(0 0 15px rgba(255, 0, 127, 0.6)) drop-shadow(0 0 30px rgba(0, 240, 255, 0.6));
+        }
+
+        /* Сам 3D Кубик */
+        .cube {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transform: rotateX(0deg) rotateY(0deg);
+            animation: spinVertical 6s linear infinite;
+            
+            /* Жестко фиксируем 3D-пространство в браузере, чтоб ничего не сплющивалось */
+            backface-visibility: visible;
+            transform: translateZ(0); 
+        }
+
+        /* Вертикальное кручение */
+        @keyframes spinVertical {
+            0% { transform: translateZ(0) rotateX(0deg) rotateY(20deg); }
+            100% { transform: translateZ(0) rotateX(360deg) rotateY(20deg); }
+        }
+
+        /* Общие стили для граней кубика */
+        .cube-face {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(8px);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: rgba(255, 255, 255, 0.85);
+            box-shadow: inset 0 1px 4px rgba(255,255,255,0.3), inset 0 -1px 4px rgba(0,0,0,0.4);
+            
+            /* Защита от просвечивания изнанки */
+            backface-visibility: visible; 
+        }
+
+        /* Четкое позиционирование граней (Z-сдвиг строго на половину ширины куба) */
+        .face-1 { transform: rotateY(0deg) translateZ(30px); }
+        .face-2 { transform: rotateY(90deg) translateZ(30px); }
+        .face-3 { transform: rotateY(180deg) translateZ(30px); }
+        .face-4 { transform: rotateY(-90deg) translateZ(30px); }
+        .face-5 { transform: rotateX(90deg) translateZ(30px); }
+        .face-6 { transform: rotateX(-90deg) translateZ(30px); }
+
+                /* Класс для полной деактивации кубического движка */
+        .cube-disabled {
+            display: none !important;
+            pointer-events: none !important;
+        }
+
+        /* Жидкая взрывная волна цвета */
+        /* Линия лазерного сканера */
+        .laser-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 8px;
+            height: 100vh;
+            background: #ffffff;
+            pointer-events: none;
+            z-index: 9999; /* Поверх вообще всего */
+            opacity: 0;
+            transform: translateX(-50px);
+            transition: none; /* JS будет управлять движением */
+        }
+
+        /* Мощное неоновое свечение по бокам от линии */
+        .laser-line::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -40px;
+            width: 88px;
+            height: 100%;
+            background: inherit;
+            filter: blur(20px);
+            opacity: 0.8;
+        }
+
+        /* Задняя штора, которая плавно наливается цветом вслед за лазером */
+        .color-curtain {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0%;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 4; /* Сразу за интерфейсом, перед сферами */
+            opacity: 0;
+            mix-blend-mode: screen; /* Красивое наложение на темный фон */
+        }
+
+                /* Эффект бешеного разгона (тряска всего интерфейса) */
+        .ai-riser-active .main-wrapper {
+            animation: interfaceShake 0.1s infinite alternate;
+        }
+
+        /* Ускоренное вращение кубика при разгоне */
+        .ai-riser-active .cube {
+            animation: spinVertical 0.8s linear infinite !important;
+        }
+
+        @keyframes interfaceShake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            100% { transform: translate(-1px, -1px) rotate(0.1deg); }
+        }
+
+        /* Мощная вспышка на весь экран в момент Дропа */
+        .drop-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #ffffff;
+            pointer-events: none;
+            z-index: 999999;
+            opacity: 0;
+            mix-blend-mode: overlay;
+            transition: none;
+        }
+
+        /* Класс взрыва при дропе */
+        .drop-flash.boom {
+            opacity: 0.8;
+            transition: opacity 0.5s cubic-bezier(0.1, 0.8, 0.3, 1);
+        }
+
+
+                /* === МОБИЛЬНАЯ АДАПТАЦИЯ === */
+        @media (max-width: 768px) {
+            /* Скрываем боковую панель, делаем ее нижним меню или скрываем вообще */
+            .sidebar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                height: 60px;
+                flex-direction: row;
+                justify-content: space-around;
+                padding: 10px;
+                background: rgba(0, 0, 0, 0.9);
+                border-right: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+                z-index: 1000;
+            }
+
+            .logo-text { display: none; } /* На мобиле логотип не нужен */
+            .nav-item { font-size: 0.8rem; padding: 5px; }
+
+            /* Растягиваем контент на весь экран */
+            .content {
+                padding: 20px 10px;
+                padding-bottom: 150px; /* Чтобы плеер не перекрывал контент */
+            }
+
+            /* Плеер: делаем его компактным */
+            .player-bar {
+                left: 10px;
+                right: 10px;
+                bottom: 70px;
+                height: 70px;
+                padding: 0 15px;
+            }
+
+            .current-track { width: 60%; }
+            .controls { width: 40%; }
+            .volume-wrapper { display: none; } /* Громкость убираем, чтобы не мешала */
+            
+            /* Куб на мобиле лучше сдвинуть или скрыть */
+            .dice-zone { bottom: 150px; left: 10px; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="player-bg"></div><canvas id="starfield-canvas"></canvas>
+
+    <div class="corner-glow" id="glow-top-left"></div>
+    <div class="corner-glow" id="glow-top-right"></div>
+    <div class="corner-glow" id="glow-bottom-left"></div>
+    <div class="corner-glow" id="glow-bottom-right"></div>
+
+    <div class="beta-badge">BETA 1.1.8</div>
+
+    <div class="main-wrapper">
+        <div class="sidebar">
+            <div class="logo-text">SpotifAKE <span id="sub-logo" style="font-size: 0.9rem; color: #a78bfa; font-weight: 400; transition: color 1s;">Crystalium</span></div>
+            <div class="nav-item active">Главная</div>
+            <div class="nav-item">Поиск</div>
+            <div class="nav-item">Моя медиатека</div>
+        </div>
+
+        <div class="content">
+            <h1>Тренды недели</h1>
+            <div class="track-list" id="tracks-container"></div>
+        </div>
+    </div>
+
+    <div class="laser-line" id="laser-effect"></div>
+    <div class="color-curtain" id="curtain-effect"></div>
+
+        <div class="dice-zone" onclick="rollRNGColor()">
+            <div class="cube">
+                <div class="cube-face face-1">1</div>
+                <div class="cube-face face-2">2</div>
+                <div class="cube-face face-3">3</div>
+                <div class="cube-face face-4">4</div>
+                <div class="cube-face face-5">5</div>
+                <div class="cube-face face-6">6</div>
+            </div>
+        </div>
+
+    <div class="player-bar">
+        <div class="current-track">
+            <img id="now-playing-img" class="current-track-img" src="" alt="">
+            <div>
+                <div id="now-playing-title" style="font-weight: 600; margin-bottom: 2px;">Ничего не играет</div>
+                <div id="now-playing-artist" style="color: #b3b3b3; font-size: 0.85rem;"></div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-btns">
+                <div class="play-pause-btn" id="master-play" onclick="togglePlayback()">▶</div>
+            </div>
+            <div class="timeline-wrapper">
+                <span id="time-current">0:00</span>
+                <input type="range" min="0" max="100" value="0" class="slider" id="track-slider" oninput="seekTrack()">
+                <span id="time-total">0:00</span>
+            </div>
+        </div>
+
+        <div class="volume-wrapper">
+            <span style="font-size: 1.1rem;">🔊</span>
+            <input type="range" min="0" max="100" value="70" class="slider volume-slider" id="volume-slider" oninput="changeVolume()">
+        </div>
+
+        <div class="drop-flash" id="ai-flash"></div>
+
+    </div>
+
+    <script>
+
+                // Массив слов для эффекта летящих лириксов (можешь вписать любые свои фразы)
+        const mockLyrics = ["БАСС", "DROP", "CRYSTALIUM", "SPOTIFAKE", "BOOM", "AI_ENGINE", "VOLUME", "DANCE", "НЕОН", "ЛИКВИД"];
+
+        let flyingWords = []; // Сюда ИИ будет подкидывать слова
+        const maxWords = 15;  // Максимум слов на экране, чтобы не захламлять визуал
+
+        // Функция для быстрой перекраски и деформации всех 4 углов сразу
+        function updateAllCorners(colorString, scaleValue, opacityValue) {
+            const corners = ['glow-top-left', 'glow-top-right', 'glow-bottom-left', 'glow-bottom-right'];
+            corners.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    if (colorString) element.style.background = `radial-gradient(circle, ${colorString} 0%, rgba(0,0,0,0) 70%)`;
+                    element.style.transform = `scale(${scaleValue})`;
+                    element.style.opacity = opacityValue;
+                }
+            });
+        }
+
+        // Класс 3D летящего слова в экран
+        class FlyingWord {
+            constructor(text) {
+                this.text = text;
+                // Случайный разлет из центра
+                this.x = (Math.random() - 0.5) * 40; 
+                this.y = (Math.random() - 0.5) * 40;
+                this.z = 1000; // Глубина (старт издалека)
+                this.speed = Math.random() * 15 + 10; // Скорость полета в лицо
+                this.color = `hsl(${Math.random() * 360}, 100%, 70%)`; // Случайный неоновый цвет для каждого слова
+            }
+
+            update(bassIntensity) {
+                // Под сильный бас слова ускоряются прямо в лицо!
+                this.z -= this.speed + (bassIntensity * 0.1); 
+                if (this.z <= 0) {
+                    return false; // Слово долетело до экрана, его надо удалить
+                }
+                return true;
+            }
+
+            draw(ctx, width, height) {
+                // Перевод 3D координат на плоский Canvas экрана
+                const k = 600 / this.z;
+                const screenX = this.x * k + width / 2;
+                const screenY = this.y * k + height / 2;
+                
+                // Чем ближе слово к лицу, тем оно огромнее
+                const size = Math.max(10, (1000 - this.z) * 0.08); 
+                const opacity = Math.min(1, (1000 - this.z) / 200); // Плавное появление из темноты
+
+                ctx.save();
+                ctx.font = `bold ${size}px sans-serif`;
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = opacity * (this.z / 1000); // Плавное растворение прямо перед глазами
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 15; // Неоновое свечение букв
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(this.text, screenX, screenY);
+                ctx.restore();
+            }
+        }
+
+        // Движок звука
+        let audio = new Audio();
+        audio.crossOrigin = "anonymous";
+        audio.volume = 0.7;
+
+        let playlist = [];
+        const jsonUrl = "https://raw.githubusercontent.com/lololololololo222222/music/main/playlist.json";
+
+        // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ВИЗУАЛИЗАЦИИ ===
+        let audioCtx, analyser, source, dataArray;
+        let starCanvas, starCtx;
+        let starsArray = [];
+        let currentCoverColor = { r: 147, g: 51, b: 234 };
+        
+                // Заведи эти переменные ГДЕ-ТО ВЫШЕ функции, в глобальной зоне:
+        let lastLowFreq = 0;
+        let riserCounter = 0;
+        let isRiserDetected = false;
+
+        // А этот кусок вставляй прямо внутрь функции анимации визуайзера (где перерисовываются звезды/бас):
+        function checkAudioStructure(dataArray) {
+            // 1. Разбиваем частоты на диапазоны
+            // Низкие (бас): первые ~10 элементов массива
+            let lowSum = 0;
+            for (let i = 0; i < 10; i++) lowSum += dataArray[i];
+            let avgLow = lowSum / 10;
+
+            // Высокие/Средние (отвечают за свист, разгон, вокал): верхний диапазон
+            let highSum = 0;
+            for (let i = 40; i < 80; i++) highSum += dataArray[i];
+            let avgHigh = highSum / 40;
+
+            const body = document.body;
+            const flash = document.getElementById('ai-flash');
+
+            // 2. АЛГОРИТМ РАЗГОНА (RISER): 
+            // Если высокие частоты долго прут вверх, а баса почти нет (типичный разгон перед дропом)
+            if (avgHigh > 130 && avgLow < 100) {
+                riserCounter++;
+                if (riserCounter > 30 && !isRiserDetected) { // Если разгон идет дольше полусекунды
+                    isRiserDetected = true;
+                    body.classList.add('ai-riser-active'); // Врубаем тряску интерфейса и куба
+                }
+            } else {
+                if (isRiserDetected && avgLow > 160 && (avgLow - lastLowFreq) > 40) {
+                    // 3. АЛГОРИТМ ДРОПА (БУМ!):
+                    // Если только что шёл разгон, и вдруг резко бабахнул мощный бас (скачок громкости низов)
+                    body.classList.remove('ai-riser-active');
+                    isRiserDetected = false;
+                    riserCounter = 0;
+
+                    // Устраиваем эпичный БУМ на экране
+                    if (flash) {
+                        flash.style.background = `rgb(${currentCoverColor.r}, ${currentCoverColor.g}, ${currentCoverColor.b})`;
+                        flash.classList.add('boom');
+                        
+                        // Взрываем и раздуваем фоновую сферу под бит
+                        const glowSphere = document.getElementById('bg-glow');
+                        if (glowSphere) {
+                            glowSphere.style.transform = 'scale(2)';
+                            glowSphere.style.opacity = '0.9';
+                        }
+
+                        setTimeout(() => {
+                            flash.classList.remove('boom');
+                            if (glowSphere) {
+                                glowSphere.style.transform = 'scale(1)';
+                                glowSphere.style.opacity = '0.5';
+                            }
+                        }, 400); // Вспышка гаснет за 400мс
+                    }
+                } else if (avgLow < 120) {
+                    // Если разгон затих без дропа, просто сбрасываем состояние через время
+                    if (riserCounter > 0) riserCounter--;
+                    if (riserCounter === 0 && isRiserDetected) {
+                        body.classList.remove('ai-riser-active');
+                        isRiserDetected = false;
+                    }
+                }
+            }
+
+            lastLowFreq = avgLow; // Запоминаем последнее значение баса для вычисления удара
+        }
+
+        let smoothedBass = 0;      
+        let isDropActive = false;  
+        let dropOpacity = 0;       
+
+        const BASS_DROP_THRESHOLD = 230; 
+        const STAR_COUNT = 300;
+        
+
+        // НЕ ЗАБУДЬ вызвать checkAudioStructure(dataArray) внутри твоего основного цикла отрисовки звука!
+
+        function initVisualizer() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256; 
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
+                source = audioCtx.createMediaElementSource(audio);
+                source.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                
+                starCanvas = document.getElementById('starfield-canvas');
+                starCtx = starCanvas.getContext('2d');
+                resizeCanvas();
+                window.addEventListener('resize', resizeCanvas);
+                initStars();
+
+                visualize();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        
+
+        function resizeCanvas() {
+            if (starCanvas) {
+                starCanvas.width = window.innerWidth;
+                starCanvas.height = window.innerHeight;
+            }
+        }
+
+        class Star {
+            constructor() {
+                this.x = (Math.random() - 0.5) * starCanvas.width * 0.1;
+                this.y = (Math.random() - 0.5) * starCanvas.height * 0.1;
+                this.z = Math.random() * starCanvas.width;
+                this.radius = Math.random() * 1.5;
+                this.baseSpeed = 1;
+            }
+
+            draw() {
+                let x = this.x / (this.z / starCanvas.width);
+                let y = this.y / (this.z / starCanvas.width);
+                let r = this.radius / (this.z / starCanvas.width);
+
+                starCtx.beginPath();
+                starCtx.arc(x + starCanvas.width / 2, y + starCanvas.height / 2, r, 0, Math.PI * 2);
+                starCtx.fillStyle = `rgba(167, 139, 250, ${1 - this.z / starCanvas.width})`;
+                starCtx.fill();
+            }
+
+            update(dropIntensity) {
+                this.z -= (this.baseSpeed + dropIntensity * 12);
+                if (this.z < 1) {
+                    this.z = starCanvas.width;
+                }
+            }
+        }
+
+        function initStars() {
+            starsArray = [];
+            for (let i = 0; i < STAR_COUNT; i++) {
+                starsArray.push(new Star());
+            }
+        }
+
+        // === ОБНОВЛЕННЫЙ ПЛАВНЫЙ ЦИКЛ АНИМАЦИИ ===
+        function visualize() {
+            requestAnimationFrame(visualize);
+            if (!analyser || audio.paused || !starCtx) return;
+
+            analyser.getByteFrequencyData(dataArray);
+
+            let bassSum = 0;
+            for (let i = 0; i < 4; i++) bassSum += dataArray[i];
+            let currentBass = bassSum / 4;
+
+            if (currentBass > smoothedBass) {
+                smoothedBass = currentBass; 
+            } else {
+                smoothedBass = smoothedBass * 0.85 + currentBass * 0.15; 
+            }
+
+            const starfieldCanvas = document.getElementById('starfield-canvas');
+
+
+            if (smoothedBass > BASS_DROP_THRESHOLD) {
+                isDropActive = true;
+                if (dropOpacity < 0.8) dropOpacity += 0.1;
+
+                glowSphere.style.background = `radial-gradient(circle, rgba(30, 144, 255, 0.8) 0%, rgba(0,0,0,0) 70%)`;
+                let dropScale = 1.2 + (smoothedBass / 255) * 0.5;
+                glowSphere.style.transform = `scale(${dropScale})`;
+                glowSphere.style.opacity = dropOpacity;
+
+                starfieldCanvas.style.opacity = dropOpacity;
+                starCtx.clearRect(0, 0, starCanvas.width, starCanvas.height);
+                starsArray.forEach(star => {
+                    star.update(1); 
+                    star.draw();
+                });
+            } else {
+                if (dropOpacity > 0) {
+                    dropOpacity -= 0.05; 
+                    starfieldCanvas.style.opacity = dropOpacity;
+                }
+
+                let baseAuraScale = 1 + (smoothedBass / 255) * 0.15;
+                let baseAuraOpacity = 0.15 + (smoothedBass / 255) * 0.2;
+
+                glowSphere.style.transform = `scale(${baseAuraScale})`;
+                glowSphere.style.opacity = baseAuraOpacity;
+                glowSphere.style.background = `radial-gradient(circle, rgba(${currentCoverColor.r}, ${currentCoverColor.g}, ${currentCoverColor.b}, 0.5) 0%, rgba(0,0,0,0) 70%)`;
+
+                if (dropOpacity > 0) {
+                    starCtx.clearRect(0, 0, starCanvas.width, starCanvas.height);
+                    starsArray.forEach(star => {
+                        star.update(0); 
+                        star.draw();
+                    });
+                } else {
+                    starCtx.clearRect(0, 0, starCanvas.width, starCanvas.height);
+                }
+            }
+        }
+
+        // === ДОБАВЛЕННЫЕ ФУНКЦИИ ЗАГРУЗКИ И РЕНДЕРА ТРЕКОВ ===
+        function loadOnlinePlaylist() {
+            fetch(jsonUrl)
+                .then(response => response.json())
+                .then(data => {
+                    playlist = data;
+                    renderTracks();
+                })
+                .catch(err => {
+                    console.error("Ошибка загрузки плейлиста:", err);
+                    document.getElementById('tracks-container').innerHTML = `
+                        <div style="color: #ef4444; padding: 16px;">Ошибка подключения к серверу музыки...</div>
+                    `;
+                });
+        }
+
+        function renderTracks() {
+            const container = document.getElementById('tracks-container');
+            container.innerHTML = "";
+            playlist.forEach((track, index) => {
+                container.innerHTML += `
+                    <div class="track-row" onclick="selectTrack(${index})">
+                        <img class="track-cover" src="${track.cover}">
+                        <div class="track-info">
+                            <div class="track-title">${track.title}</div>
+                            <div class="track-author">${track.artist || "Неизвестный исполнитель"}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function selectTrack(index) {
+            let track = playlist[index];
+            
+            document.getElementById('now-playing-title').innerText = track.title;
+            document.getElementById('now-playing-artist').innerText = track.artist || "";
+            
+            let img = document.getElementById('now-playing-img');
+            img.crossOrigin = "anonymous"; 
+            img.src = track.cover;
+            img.style.display = "block";
+
+            img.onload = function() {
+                extractAndSetCurrentCoverColor(img);
+            };
+
+            audio.src = track.url;
+            audio.play();
+            document.getElementById('master-play').innerText = "⏸";
+
+            initVisualizer();
+        }
+
+        function extractAndSetCurrentCoverColor(imgElement) {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 1; canvas.height = 1;
+                ctx.drawImage(imgElement, 0, 0, 1, 1);
+                
+                const imgData = ctx.getImageData(0, 0, 1, 1).data;
+                currentCoverColor.r = imgData[0];
+                currentCoverColor.g = imgData[1];
+                currentCoverColor.b = imgData[2];
+            } catch (e) {
+                console.log("Откат на фиолетовый");
+                currentCoverColor = { r: 147, g: 51, b: 234 };
+            }
+        }
+
+        function togglePlayback() {
+            if (!audio.src) return;
+            if (audio.paused) {
+                audio.play();
+                document.getElementById('master-play').innerText = "⏸";
+                initVisualizer();
+
+                // === ВСТАВЛЯЕМ СЮДА ===
+                const glowSphere = document.getElementById('bg-glow');
+                if (glowSphere) {
+                    // Плавно возвращаем сферу из "кубического" масштаба (1.7) в стандартный для ИИ-бассера
+                    glowSphere.style.transform = 'scale(1)'; 
+                    glowSphere.style.opacity = '0.5'; // Возвращаем рабочую яркость для басов
+                }
+                // ======================
+
+            } else {
+                audio.pause();
+                document.getElementById('master-play').innerText = "▶";
+                const glowSphere = document.getElementById('bg-glow');
+                glowSphere.style.transform = `scale(1)`;
+                glowSphere.style.opacity = 0.1;
+                document.getElementById('starfield-canvas').style.opacity = 0;
+            }
+        }
+
+        function updateSliderBackground(sliderElement, percent) {
+            sliderElement.style.background = `linear-gradient(to right, #1ed760 0%, #1ed760 ${percent}%, #4f4f4f ${percent}%, #4f4f4f 100%)`;
+        }
+
+        audio.addEventListener('timeupdate', () => {
+            if (isNaN(audio.duration)) return;
+            let current = audio.currentTime; let total = audio.duration;
+            let pct = (current / total) * 100;
+            
+            let trackSlider = document.getElementById('track-slider');
+            trackSlider.value = pct;
+            updateSliderBackground(trackSlider, pct);
+            
+            document.getElementById('time-current').innerText = formatTime(current);
+            document.getElementById('time-total').innerText = formatTime(total);
+        });
+
+        function seekTrack() {
+            if (!audio.src) return;
+            let trackSlider = document.getElementById('track-slider');
+            let sliderVal = trackSlider.value;
+            updateSliderBackground(trackSlider, sliderVal);
+            audio.currentTime = (sliderVal / 100) * audio.duration;
+        }
+
+        function changeVolume() {
+            let volumeSlider = document.getElementById('volume-slider');
+            let vol = volumeSlider.value;
+            updateSliderBackground(volumeSlider, vol);
+            audio.volume = vol / 100;
+        }
+
+        window.onload = function() {
+            let volumeSlider = document.getElementById('volume-slider');
+            updateSliderBackground(volumeSlider, 70);
+            loadOnlinePlaylist();
+        };
+
+        function formatTime(seconds) {
+            let min = Math.floor(seconds / 60);
+            let sec = Math.floor(seconds % 60);
+            if (sec < 10) sec = "0" + sec;
+            return min + ":" + sec;
+        }
+
+// === ГЛАВНЫЙ НАСТРОЕЧНЫЙ ПАРАМЕТР ===
+// true — куб работает, крутится и взрывает экран лазером
+// false — куб полностью скрыт, анимации и клики заблокированы
+const RNG_cube = false; 
+
+
+// Функция автоматической проверки флага при запуске программы
+function initCubeEngine() {
+    const diceZone = document.querySelector('.dice-zone');
+    if (diceZone) {
+        if (!RNG_cube) {
+            // Если false — намертво скрываем куб из интерфейса
+            diceZone.classList.add('cube-disabled');
+        } else {
+            // Если true — убираем скрытие (на случай динамического переключения)
+            diceZone.classList.remove('cube-disabled');
+        }
+    }
+}
+
+    // Вызови эту проверку при загрузке страницы (закинь в свой блок инициализации приложения)
+    document.addEventListener('DOMContentLoaded', initCubeEngine);
+
+
+    // Обновленная функция броска с защитой от флага
+    function rollRNGColor() {
+        // ЕЩЕ ОДНА ЗАЩИТА: Если параметр выключен, клик вообще ничего не сделает
+        if (!RNG_cube) return;
+
+        // Проверяем: если песня играет, имитируем клик по кнопке паузы
+        const playBtn = document.querySelector('.play-pause-btn');
+        if (typeof isPlaying !== 'undefined' && isPlaying) {
+            if (playBtn) playBtn.click(); 
+        }
+
+        // Набор сочных неоновых цветов
+        const rngColors = [
+            'rgb(255, 0, 127)',   // Кислотно-розовый
+            'rgb(0, 240, 255)',   // Ледяной неон
+            'rgb(157, 23, 248)',  // Фиолетовый взрыв
+            'rgb(0, 255, 136)',   // Ядовито-зеленый
+            'rgb(255, 102, 0)',   // Огненный оранжевый
+            'rgb(255, 217, 0)'    // Электрический желтый
+        ];
+        
+        const randomColor = rngColors[Math.floor(Math.random() * rngColors.length)];
+        
+        const laser = document.getElementById('laser-effect');
+        const curtain = document.getElementById('curtain-effect');
+        const subLogo = document.getElementById('sub-logo');
+
+        laser.style.transition = 'none';
+        curtain.style.transition = 'none';
+        
+        laser.style.transform = 'translateX(-50px)';
+        laser.style.opacity = '1';
+        laser.style.background = '#ffffff';
+        laser.style.boxShadow = `0 0 40px 20px ${randomColor}, 0 0 15px #fff`;
+
+        curtain.style.width = '0%';
+        curtain.style.opacity = '0.7'; 
+        curtain.style.background = `linear-gradient(to right, ${randomColor} 30%, rgba(0,0,0,0) 100%)`;
+
+        setTimeout(() => {
+            laser.style.transition = 'transform 2.8s cubic-bezier(0.3, 0.5, 0.4, 1)';
+            curtain.style.transition = 'width 2.8s cubic-bezier(0.3, 0.5, 0.4, 1), opacity 1.5s ease 2.5s';
+
+            laser.style.transform = `translateX(${window.innerWidth + 100}px)`;
+            curtain.style.width = '100%';
+            
+            if (subLogo) {
+                subLogo.style.color = randomColor;
+                subLogo.style.textShadow = `0 0 15px ${randomColor}`;
+            }
+        }, 50);
+
+        setTimeout(() => {
+            const rgbValues = randomColor.match(/\d+/g);
+            
+            if (typeof currentCoverColor !== 'undefined') {
+                currentCoverColor.r = parseInt(rgbValues[0]);
+                currentCoverColor.g = parseInt(rgbValues[1]);
+                currentCoverColor.b = parseInt(rgbValues[2]);
+            }
+
+            if (glowSphere) {
+                glowSphere.style.background = `radial-gradient(circle, rgba(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]}, 0.45) 0%, rgba(0,0,0,0) 75%)`;
+                glowSphere.style.transform = 'scale(1.7)';
+                glowSphere.style.opacity = '0.8';
+            }
+            
+            laser.style.opacity = '0';
+            curtain.style.opacity = '0';
+        }, 2600);
+    }
+
+    </script>
+</body>
+</html>

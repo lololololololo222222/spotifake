@@ -1,0 +1,32 @@
+{
+  "name": "spotifake",
+  "version": "1.1.5",
+  "description": "Crystalium Музыкальный Плеер",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "author": "Maxim Agranovich",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.maxim.spotifake",
+    "productName": "SpotifAKE",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        "portable"
+      ]
+    }
+  }
+}
